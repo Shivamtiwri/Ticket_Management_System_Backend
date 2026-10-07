@@ -9,8 +9,6 @@ import { logger } from '../utils/logger';
 const seed = async () => {
   await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/ticket_management');
   logger.info('Connected to database');
-
-  // Create admin
   const admin = await User.findOne({ email: 'admin@example.com' });
   if (!admin) {
     await User.create({
@@ -22,7 +20,7 @@ const seed = async () => {
     logger.info('Admin user created: admin@example.com / Admin@123');
   }
 
-  // Create agent
+
   const agent = await User.findOne({ email: 'agent@example.com' });
   if (!agent) {
     await User.create({
@@ -34,7 +32,7 @@ const seed = async () => {
     logger.info('Agent user created: agent@example.com / Agent@123');
   }
 
-  // Create customer
+
   const customer = await User.findOne({ email: 'customer@example.com' });
   if (!customer) {
     await User.create({

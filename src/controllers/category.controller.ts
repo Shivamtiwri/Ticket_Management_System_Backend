@@ -1,4 +1,4 @@
-﻿// Removed: only Register, Login and Dashboard functionality is kept in this file.
+﻿
 import { Response } from 'express';
 import { Category } from '../models/Category';
 import { ActivityLog } from '../models/ActivityLog';

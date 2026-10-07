@@ -44,6 +44,14 @@ const UserSchema = new Schema<IUser>(
       trim: true,
     },
     lastLogin: Date,
+    refreshToken: {
+      type: String,
+      select: false,
+    },
+    refreshTokenExpiry: {
+      type: Date,
+      select: false,
+    },
   },
   {
     timestamps: true,

@@ -54,6 +54,8 @@ export interface IUser extends Document {
   phone?: string;
   department?: string;
   lastLogin?: Date;
+  refreshToken?: string;
+  refreshTokenExpiry?: Date;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
