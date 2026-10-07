@@ -9,7 +9,6 @@ export const validate = (validations: ValidationChain[]) => {
       res.status(400).json({
         success: false,
         message: 'Validation failed',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         errors: errors.array().map((e) => ({ field: (e as any).path, message: e.msg })),
       });
       return;

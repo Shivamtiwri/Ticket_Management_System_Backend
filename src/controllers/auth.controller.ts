@@ -6,7 +6,6 @@ import { ActivityLog } from '../models/ActivityLog';
 import { AuthRequest, ActivityAction } from '../types';
 import { sendSuccess, sendCreated, sendError } from '../utils/apiResponse';
 
-/* ─── token helpers ─────────────────────────────────────────────────────── */
 
 const generateAccessToken = (user: {
   id: string;
@@ -21,10 +20,6 @@ const generateAccessToken = (user: {
   );
 };
 
-/**
- * Generates a cryptographically random refresh token string and its expiry date.
- * The token is stored hashed in the DB but returned plain to the client.
- */
 const generateRefreshToken = (): { token: string; expiry: Date } => {
   const token = crypto.randomBytes(64).toString('hex');
   const expiresInDays = parseInt(process.env.JWT_REFRESH_EXPIRES_IN_DAYS || '30', 10);
@@ -32,18 +27,16 @@ const generateRefreshToken = (): { token: string; expiry: Date } => {
   return { token, expiry };
 };
 
-/** Writes the refresh token into a secure httpOnly cookie */
 const setRefreshCookie = (res: Response, token: string, expiry: Date): void => {
   res.cookie('refreshToken', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
     expires: expiry,
-    path: '/api/auth', // only sent to auth endpoints
+    path: '/api/auth',
   });
 };
 
-/** Clears the refresh token cookie */
 const clearRefreshCookie = (res: Response): void => {
   res.clearCookie('refreshToken', {
     httpOnly: true,
@@ -53,7 +46,6 @@ const clearRefreshCookie = (res: Response): void => {
   });
 };
 
-/* ─── controllers ───────────────────────────────────────────────────────── */
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   const { name, email, password, phone } = req.body;
@@ -82,7 +74,6 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
   const { token: refreshToken, expiry: refreshTokenExpiry } = generateRefreshToken();
 
-  // Store refresh token in DB
   user.refreshToken = refreshToken;
   user.refreshTokenExpiry = refreshTokenExpiry;
   await user.save();
@@ -131,7 +122,6 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
   const { token: refreshToken, expiry: refreshTokenExpiry } = generateRefreshToken();
 
-  // Rotate: replace any existing refresh token
   user.refreshToken = refreshToken;
   user.refreshTokenExpiry = refreshTokenExpiry;
   await user.save();
@@ -149,11 +139,6 @@ export const login = async (req: Request, res: Response): Promise<void> => {
   }, 'Login successful');
 };
 
-/**
- * POST /auth/refresh
- * Reads the refresh token from the httpOnly cookie, validates it against the DB,
- * issues a new access token and rotates the refresh token.
- */
 export const refresh = async (req: Request, res: Response): Promise<void> => {
   const incomingToken: string | undefined = req.cookies?.refreshToken;
 
@@ -162,20 +147,17 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  // Look up user by refresh token
   const user = await User.findOne({
     refreshToken: incomingToken,
-    refreshTokenExpiry: { $gt: new Date() }, // not expired
+    refreshTokenExpiry: { $gt: new Date() },
   });
 
   if (!user || !user.isActive) {
-    // Token reuse or invalid — clear cookie
     clearRefreshCookie(res);
     sendError(res, 'Invalid or expired refresh token', 401);
     return;
   }
 
-  // Rotate refresh token
   const { token: newRefreshToken, expiry: newRefreshExpiry } = generateRefreshToken();
   user.refreshToken = newRefreshToken;
   user.refreshTokenExpiry = newRefreshExpiry;
@@ -211,7 +193,6 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
 };
 
 export const logout = async (req: AuthRequest, res: Response): Promise<void> => {
-  // Revoke the refresh token stored in DB
   const incomingToken: string | undefined = req.cookies?.refreshToken;
   if (incomingToken) {
     await User.findOneAndUpdate(

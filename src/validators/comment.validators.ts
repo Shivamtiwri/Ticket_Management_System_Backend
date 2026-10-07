@@ -1,4 +1,3 @@
-﻿// Removed: only Register, Login and Dashboard functionality is kept in this file.
 import { body } from 'express-validator';
 
 export const createCommentValidator = [

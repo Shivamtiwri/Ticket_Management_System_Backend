@@ -21,7 +21,6 @@ export const errorHandler = (
 ): void => {
   logger.error('Error:', { message: err.message, stack: err.stack });
 
-  // Mongoose duplicate key
   if (err.code === 11000 && err.keyValue) {
     const field = Object.keys(err.keyValue)[0];
     res.status(409).json({
@@ -31,9 +30,7 @@ export const errorHandler = (
     return;
   }
 
-  // Mongoose validation error
   if (err.name === 'ValidationError') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const errors = Object.values((err as any).errors).map((e: any) => ({
       field: e.path,
       message: e.message,
@@ -42,7 +39,6 @@ export const errorHandler = (
     return;
   }
 
-  // JWT errors
   if (err.name === 'JsonWebTokenError') {
     res.status(401).json({ success: false, message: 'Invalid token' });
     return;

@@ -1,4 +1,3 @@
-﻿// Removed: only Register, Login and Dashboard functionality is kept in this file.
 import { body, query } from 'express-validator';
 import { TicketPriority, TicketStatus } from '../types';
 

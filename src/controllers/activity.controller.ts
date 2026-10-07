@@ -17,7 +17,6 @@ export const getActivityLogs = async (req: AuthRequest, res: Response): Promise<
   if (action) filter.action = action;
 
 
-//   console.log(filter)
 
   const [logs, total] = await Promise.all([
     ActivityLog.find(filter)
