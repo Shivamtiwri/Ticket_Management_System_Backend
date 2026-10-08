@@ -1,22 +1,40 @@
 ﻿
 import { Response } from 'express';
 import { ActivityLog } from '../models/ActivityLog';
-import { AuthRequest } from '../types';
-import { sendPaginated, sendSuccess } from '../utils/apiResponse';
+import { Ticket } from '../models/Ticket';
+import { AuthRequest, UserRole } from '../types';
+import { sendPaginated, sendSuccess, sendError } from '../utils/apiResponse';
+import { buildSearchRegex, isObjectIdString, ticketIdFilter } from '../utils/queryUtils';
 
 export const getActivityLogs = async (req: AuthRequest, res: Response): Promise<void> => {
   const page = parseInt(req.query.page as string) || 1;
-  const limit = parseInt(req.query.limit as string) || 20;
+  const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
   const ticketId = req.query.ticketId as string | undefined;
   const actorId = req.query.actorId as string | undefined;
   const action = req.query.action as string | undefined;
+  const search = req.query.search as string | undefined;
 
   const filter: Record<string, unknown> = {};
-  if (ticketId) filter.ticket = ticketId;
   if (actorId) filter.actor = actorId;
   if (action) filter.action = action;
 
+  if (ticketId) {
+    if (isObjectIdString(ticketId)) {
+      filter.ticket = ticketId;
+    } else {
+      const ticket = await Ticket.findOne(ticketIdFilter(ticketId)).select('_id');
+      if (!ticket) {
+        sendPaginated(res, [], 0, page, limit);
+        return;
+      }
+      filter.ticket = ticket._id;
+    }
+  }
 
+  if (search) {
+    const searchRegex = buildSearchRegex(search);
+    filter.$or = [{ description: searchRegex }, { 'metadata.ticketId': searchRegex }];
+  }
 
   const [logs, total] = await Promise.all([
     ActivityLog.find(filter)
@@ -33,7 +51,18 @@ export const getActivityLogs = async (req: AuthRequest, res: Response): Promise<
 };
 
 export const getTicketActivity = async (req: AuthRequest, res: Response): Promise<void> => {
-  const logs = await ActivityLog.find({ ticket: req.params.ticketId })
+  const ticket = await Ticket.findOne(ticketIdFilter(req.params.ticketId));
+  if (!ticket) {
+    sendError(res, 'Ticket not found', 404);
+    return;
+  }
+
+  if (req.user!.role === UserRole.CUSTOMER && ticket.createdBy.toString() !== req.user!.id) {
+    sendError(res, 'Access denied', 403);
+    return;
+  }
+
+  const logs = await ActivityLog.find({ ticket: ticket._id })
     .populate('actor', 'name email role')
     .sort({ createdAt: 1 })
     .lean();

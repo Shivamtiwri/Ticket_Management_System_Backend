@@ -1,11 +1,15 @@
 import rateLimit from 'express-rate-limit';
 
+const isTestEnv = () => process.env.NODE_ENV === 'test';
+
 export const generalLimiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'),
-  max: parseInt(process.env.RATE_LIMIT_MAX || '100'),
+  // max: parseInt(process.env.RATE_LIMIT_MAX || '100'),
+  max: parseInt('100'),
   message: { success: false, message: 'Too many requests, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: isTestEnv,
 });
 
 export const authLimiter = rateLimit({
@@ -14,4 +18,5 @@ export const authLimiter = rateLimit({
   message: { success: false, message: 'Too many auth attempts, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: isTestEnv,
 });

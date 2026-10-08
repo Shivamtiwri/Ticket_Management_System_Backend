@@ -14,7 +14,14 @@ export class AppError extends Error {
 }
 
 export const errorHandler = (
-  err: Error & { statusCode?: number; code?: number; keyValue?: Record<string, string> },
+  err: Error & {
+    statusCode?: number;
+    code?: number;
+    keyValue?: Record<string, string>;
+    type?: string;
+    path?: string;
+    code2?: string;
+  },
   _req: Request,
   res: Response,
   _next: NextFunction
@@ -23,9 +30,19 @@ export const errorHandler = (
 
   if (err.code === 11000 && err.keyValue) {
     const field = Object.keys(err.keyValue)[0];
+    const label = field.charAt(0).toUpperCase() + field.slice(1);
     res.status(409).json({
       success: false,
-      message: `${field} already exists`,
+      message: `${label} already exists`,
+    });
+    return;
+  }
+
+  if (err.name === 'CastError') {
+    res.status(400).json({
+      success: false,
+      message: `Invalid value for "${err.path}"`,
+      errors: [{ field: err.path || 'unknown', message: `Invalid value for "${err.path}"` }],
     });
     return;
   }
@@ -36,6 +53,31 @@ export const errorHandler = (
       message: e.message,
     }));
     res.status(400).json({ success: false, message: 'Validation failed', errors });
+    return;
+  }
+
+  if (err.name === 'MulterError') {
+    const multerCode = (err as any).code as string | undefined;
+    const message =
+      multerCode === 'LIMIT_FILE_SIZE'
+        ? 'File is too large. Maximum allowed size is 5 MB per file'
+        : multerCode === 'LIMIT_FILE_COUNT'
+          ? 'Too many files. Maximum allowed is 5 files'
+          : multerCode === 'LIMIT_UNEXPECTED_FILE'
+            ? 'Unexpected file field'
+            : 'File upload failed';
+    const statusCode = multerCode === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    res.status(statusCode).json({ success: false, message });
+    return;
+  }
+
+  if (err.type === 'entity.parse.failed') {
+    res.status(400).json({ success: false, message: 'Invalid JSON payload' });
+    return;
+  }
+
+  if (err.type === 'entity.too.large') {
+    res.status(413).json({ success: false, message: 'Request payload is too large' });
     return;
   }
 

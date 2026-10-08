@@ -5,6 +5,7 @@ import { User } from '../models/User';
 import { Ticket } from '../models/Ticket';
 import { IComment, UserRole } from '../types';
 import { logger } from '../utils/logger';
+import { ticketIdFilter } from '../utils/queryUtils';
 
 interface JwtPayload {
   id: string;
@@ -96,14 +97,14 @@ export const initSocket = (
     logger.info(`Socket connected: user=${user.id} (${user.role})`);
 
     socket.on('ticket:join', async (payload) => {
-      const ticketId = payload?.ticketId;
-      if (!ticketId) {
+      const requestedId = payload?.ticketId;
+      if (!requestedId) {
         socket.emit('ticket:error', { message: 'ticketId is required' });
         return;
       }
 
       try {
-        const ticket = await Ticket.findById(ticketId).select('createdBy');
+        const ticket = await Ticket.findOne(ticketIdFilter(requestedId)).select('createdBy');
         if (!ticket) {
           socket.emit('ticket:error', { message: 'Ticket not found' });
           return;
@@ -116,18 +117,26 @@ export const initSocket = (
           return;
         }
 
-        socket.join(ticketRoom(ticketId));
-        if (isStaff) socket.join(staffRoom(ticketId));
+        const roomId = ticket._id.toString();
+        socket.join(ticketRoom(roomId));
+        if (isStaff) socket.join(staffRoom(roomId));
       } catch {
         socket.emit('ticket:error', { message: 'Unable to join ticket room' });
       }
     });
 
-    socket.on('ticket:leave', (payload) => {
-      const ticketId = payload?.ticketId;
-      if (!ticketId) return;
-      socket.leave(ticketRoom(ticketId));
-      socket.leave(staffRoom(ticketId));
+    socket.on('ticket:leave', async (payload) => {
+      const requestedId = payload?.ticketId;
+      if (!requestedId) return;
+      try {
+        const ticket = await Ticket.findOne(ticketIdFilter(requestedId)).select('_id');
+        const roomId = ticket ? ticket._id.toString() : requestedId;
+        socket.leave(ticketRoom(roomId));
+        socket.leave(staffRoom(roomId));
+      } catch {
+        socket.leave(ticketRoom(requestedId));
+        socket.leave(staffRoom(requestedId));
+      }
     });
 
     socket.on('disconnect', () => {

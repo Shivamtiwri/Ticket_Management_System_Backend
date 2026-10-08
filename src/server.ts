@@ -8,7 +8,21 @@ import { logger } from './utils/logger';
 
 const PORT = parseInt(process.env.PORT || '5000');
 
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled promise rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught exception:', err);
+  process.exit(1);
+});
+
 const startServer = async (): Promise<void> => {
+  if (!process.env.JWT_SECRET) {
+    logger.error('JWT_SECRET is not set. Please configure your .env file');
+    process.exit(1);
+  }
+
   await connectDatabase();
 
   const server = app.listen(PORT, () => {

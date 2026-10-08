@@ -15,10 +15,22 @@ export const updateTicketValidator = [
   body('status').optional().isIn(Object.values(TicketStatus)).withMessage('Invalid status value'),
 ];
 
+export const assignTicketValidator = [
+  body('agentId').notEmpty().withMessage('Agent is required').isMongoId().withMessage('Invalid agent ID'),
+];
+
 export const ticketQueryValidator = [
   query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer').toInt(),
   query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100').toInt(),
   query('status').optional().isIn(Object.values(TicketStatus)).withMessage('Invalid status'),
   query('priority').optional().isIn(Object.values(TicketPriority)).withMessage('Invalid priority'),
   query('sortBy').optional().isIn(['newest', 'oldest', 'updated', 'priority']).withMessage('Invalid sort option'),
+  query('category').optional().isMongoId().withMessage('Invalid category ID'),
+  query('assignedAgent').optional().isMongoId().withMessage('Invalid agent ID'),
+  query('search').optional().trim().isLength({ max: 200 }).withMessage('Search term must be at most 200 characters'),
+];
+
+export const availableTicketsQueryValidator = [
+  query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer').toInt(),
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100').toInt(),
 ];

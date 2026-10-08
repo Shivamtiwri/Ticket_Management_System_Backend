@@ -3,10 +3,11 @@ import { User } from '../models/User';
 import { ActivityLog } from '../models/ActivityLog';
 import { AuthRequest, UserRole, ActivityAction } from '../types';
 import { sendSuccess, sendError, sendPaginated } from '../utils/apiResponse';
+import { buildSearchRegex } from '../utils/queryUtils';
 
 export const getUsers = async (req: AuthRequest, res: Response): Promise<void> => {
   const page = parseInt(req.query.page as string) || 1;
-  const limit = parseInt(req.query.limit as string) || 20;
+  const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
   const role = req.query.role as UserRole | undefined;
   const search = req.query.search as string | undefined;
   const isActive = req.query.isActive as string | undefined;
@@ -15,10 +16,8 @@ export const getUsers = async (req: AuthRequest, res: Response): Promise<void> =
   if (role) filter.role = role;
   if (isActive !== undefined) filter.isActive = isActive === 'true';
   if (search) {
-    filter.$or = [
-      { name: { $regex: search, $options: 'i' } },
-      { email: { $regex: search, $options: 'i' } },
-    ];
+    const searchRegex = buildSearchRegex(search);
+    filter.$or = [{ name: searchRegex }, { email: searchRegex }];
   }
 
   const total = await User.countDocuments(filter);
@@ -70,6 +69,12 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
 
 export const updateUserRole = async (req: AuthRequest, res: Response): Promise<void> => {
   const { role } = req.body;
+
+  if (req.params.id === req.user!.id) {
+    sendError(res, 'You cannot change your own role', 400);
+    return;
+  }
+
   const user = await User.findByIdAndUpdate(
     req.params.id,
     { role },
@@ -92,6 +97,11 @@ export const updateUserRole = async (req: AuthRequest, res: Response): Promise<v
 };
 
 export const toggleUserStatus = async (req: AuthRequest, res: Response): Promise<void> => {
+  if (req.params.id === req.user!.id) {
+    sendError(res, 'You cannot deactivate your own account', 400);
+    return;
+  }
+
   const user = await User.findById(req.params.id);
   if (!user) {
     sendError(res, 'User not found', 404);

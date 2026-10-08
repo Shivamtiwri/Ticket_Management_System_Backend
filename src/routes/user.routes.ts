@@ -5,14 +5,14 @@ import {
 } from '../controllers/user.controller';
 import { authenticate, authorize } from '../middleware/auth';
 import { validate } from '../middleware/validate';
-import { updateUserValidator, updateRoleValidator } from '../validators/user.validators';
+import { updateUserValidator, updateRoleValidator, userListQueryValidator } from '../validators/user.validators';
 import { UserRole } from '../types';
 
 const router = Router();
 
 router.use(authenticate);
 
-router.get('/', authorize(UserRole.ADMIN), getUsers);
+router.get('/', authorize(UserRole.ADMIN), validate(userListQueryValidator), getUsers);
 router.get('/agents', authorize(UserRole.ADMIN), getAgents);
 router.put('/profile', validate(updateUserValidator), updateProfile);
 router.get('/:id', authorize(UserRole.ADMIN), getUserById);

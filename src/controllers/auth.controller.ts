@@ -100,14 +100,14 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  if (!user.isActive) {
-    sendError(res, 'Account is deactivated. Please contact support.', 403);
-    return;
-  }
-
   const isMatch = await user.comparePassword(password);
   if (!isMatch) {
     sendError(res, 'Invalid email or password', 401);
+    return;
+  }
+
+  if (!user.isActive) {
+    sendError(res, 'Account is deactivated. Please contact support.', 403);
     return;
   }
 

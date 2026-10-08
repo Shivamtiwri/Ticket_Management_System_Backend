@@ -12,6 +12,5 @@ module.exports = {
     '!src/scripts/**',
     '!src/server.ts',
   ],
-  setupFilesAfterFramework: [],
   testTimeout: 30000,
 };

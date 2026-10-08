@@ -1,9 +1,11 @@
 ﻿
 import { Response } from 'express';
 import { Category } from '../models/Category';
+import { Ticket } from '../models/Ticket';
 import { ActivityLog } from '../models/ActivityLog';
 import { AuthRequest, ActivityAction } from '../types';
 import { sendSuccess, sendCreated, sendError } from '../utils/apiResponse';
+import { escapeRegex } from '../utils/queryUtils';
 
 export const getCategories = async (_req: AuthRequest, res: Response): Promise<void> => {
   const categories = await Category.find().sort({ name: 1 });
@@ -18,7 +20,8 @@ export const getActiveCategories = async (_req: AuthRequest, res: Response): Pro
 export const createCategory = async (req: AuthRequest, res: Response): Promise<void> => {
   const { name, description } = req.body;
 
-  const existing = await Category.findOne({ name: { $regex: new RegExp(`^${name}$`, 'i') } });
+  const escapedName = escapeRegex(name.trim());
+  const existing = await Category.findOne({ name: { $regex: `^${escapedName}$`, $options: 'i' } });
   if (existing) {
     sendError(res, 'Category with this name already exists', 409);
     return;
@@ -38,9 +41,14 @@ export const createCategory = async (req: AuthRequest, res: Response): Promise<v
 
 export const updateCategory = async (req: AuthRequest, res: Response): Promise<void> => {
   const { name, description, isActive } = req.body;
+  const updates: Record<string, unknown> = {};
+  if (name !== undefined) updates.name = name;
+  if (description !== undefined) updates.description = description;
+  if (isActive !== undefined) updates.isActive = isActive;
+
   const category = await Category.findByIdAndUpdate(
     req.params.id,
-    { name, description, isActive },
+    updates,
     { new: true, runValidators: true }
   );
 
@@ -60,6 +68,16 @@ export const updateCategory = async (req: AuthRequest, res: Response): Promise<v
 };
 
 export const deleteCategory = async (req: AuthRequest, res: Response): Promise<void> => {
+  const ticketCount = await Ticket.countDocuments({ category: req.params.id });
+  if (ticketCount > 0) {
+    sendError(
+      res,
+      `Cannot delete category: it is used by ${ticketCount} ticket${ticketCount === 1 ? '' : 's'}. Deactivate it instead`,
+      409
+    );
+    return;
+  }
+
   const category = await Category.findByIdAndDelete(req.params.id);
   if (!category) {
     sendError(res, 'Category not found', 404);

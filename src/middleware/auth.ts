@@ -36,10 +36,10 @@ export const authenticate = async (
     }
 
     req.user = {
-      id: decoded.id,
-      email: decoded.email,
-      role: decoded.role,
-      name: decoded.name,
+      id: user._id.toString(),
+      email: user.email,
+      role: user.role,
+      name: user.name,
     };
 
     next();

@@ -1,9 +1,12 @@
 ﻿import { Response } from 'express';
+import { Types } from 'mongoose';
 import { Ticket } from '../models/Ticket';
+import { User } from '../models/User';
 import { ActivityLog } from '../models/ActivityLog';
 import { AuthRequest, UserRole, TicketStatus, ActivityAction } from '../types';
 import { sendSuccess, sendCreated, sendError, sendPaginated } from '../utils/apiResponse';
 import { isValidTransition } from '../utils/statusTransitions';
+import { buildSearchRegex, isObjectIdString, ticketIdFilter } from '../utils/queryUtils';
 
 const getSortOptions = (sortBy?: string): Record<string, 1 | -1> => {
     switch (sortBy) {
@@ -22,22 +25,38 @@ const PRIORITY_ORDER: Record<string, number> = {
 const buildTicketFilter = (query: Record<string, string>, userId?: string, role?: UserRole) => {
     const filter: Record<string, unknown> = {};
 
+    if (query.status) filter.status = query.status;
+    if (query.priority) filter.priority = query.priority;
+    if (query.category) filter.category = query.category;
+    if (role === UserRole.ADMIN && query.assignedAgent) filter.assignedAgent = query.assignedAgent;
+
+    if (query.search) {
+        const searchRegex = buildSearchRegex(query.search);
+        filter.$or = [
+            { subject: searchRegex },
+            { description: searchRegex },
+            { ticketId: searchRegex },
+        ];
+    }
+
     if (role === UserRole.CUSTOMER) {
         filter.createdBy = userId;
     } else if (role === UserRole.AGENT) {
         filter.assignedAgent = userId;
     }
 
-    if (query.status) filter.status = query.status;
-    if (query.priority) filter.priority = query.priority;
-    if (query.category) filter.category = query.category;
-    if (query.assignedAgent) filter.assignedAgent = query.assignedAgent;
-
-    if (query.search) {
-        filter.$text = { $search: query.search };
-    }
-
     return filter;
+};
+
+const castIdFields = (filter: Record<string, unknown>): Record<string, unknown> => {
+    const match: Record<string, unknown> = { ...filter };
+    for (const key of ['category', 'createdBy', 'assignedAgent']) {
+        const value = match[key];
+        if (typeof value === 'string' && isObjectIdString(value)) {
+            match[key] = new Types.ObjectId(value);
+        }
+    }
+    return match;
 };
 
 
@@ -81,7 +100,7 @@ export const createTicket = async (req: AuthRequest, res: Response): Promise<voi
 
 export const getTickets = async (req: AuthRequest, res: Response): Promise<void> => {
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
+    const limit = Math.min(parseInt(req.query.limit as string) || 10, 100);
     const sortBy = req.query.sortBy as string;
 
     const filter = buildTicketFilter(
@@ -89,6 +108,35 @@ export const getTickets = async (req: AuthRequest, res: Response): Promise<void>
         req.user!.id,
         req.user!.role
     );
+
+    if (sortBy === 'priority') {
+        const match = castIdFields(filter);
+        const rankBranches = Object.entries(PRIORITY_ORDER).map(([priority, rank]) => ({
+            case: { $eq: ['$priority', priority] },
+            then: rank,
+        }));
+
+        const [results, countResults] = await Promise.all([
+            Ticket.aggregate([
+                { $match: match },
+                { $addFields: { priorityRank: { $switch: { branch: rankBranches, default: 0 } } } },
+                { $sort: { priorityRank: -1, createdAt: -1 } },
+                { $skip: (page - 1) * limit },
+                { $limit: limit },
+            ]),
+            Ticket.aggregate([{ $match: match }, { $count: 'total' }]),
+        ]);
+
+        const total: number = countResults[0]?.total ?? 0;
+        const tickets = await Ticket.populate(results, [
+            { path: 'category', select: 'name' },
+            { path: 'createdBy', select: 'name email role' },
+            { path: 'assignedAgent', select: 'name email' },
+        ]);
+
+        sendPaginated(res, tickets, total, page, limit);
+        return;
+    }
 
     const sortOptions = getSortOptions(sortBy);
 
@@ -103,10 +151,6 @@ export const getTickets = async (req: AuthRequest, res: Response): Promise<void>
             .lean(),
         Ticket.countDocuments(filter),
     ]);
-
-    if (sortBy === 'priority') {
-        tickets.sort((a, b) => (PRIORITY_ORDER[b.priority] || 0) - (PRIORITY_ORDER[a.priority] || 0));
-    }
 
     sendPaginated(res, tickets, total, page, limit);
 };
@@ -137,7 +181,7 @@ export const getTicketById = async (req: AuthRequest, res: Response): Promise<vo
 };
 
 export const updateTicket = async (req: AuthRequest, res: Response): Promise<void> => {
-    const ticket = await Ticket.findById(req.params.id);
+    const ticket = await Ticket.findOne(ticketIdFilter(req.params.id));
     if (!ticket) {
         sendError(res, 'Ticket not found', 404);
         return;
@@ -160,8 +204,16 @@ export const updateTicket = async (req: AuthRequest, res: Response): Promise<voi
         }
         changes.push(`Status changed from ${ticket.status} to ${status}`);
         ticket.status = status;
-        if (status === TicketStatus.RESOLVED) ticket.resolvedAt = new Date();
-        if (status === TicketStatus.CLOSED) ticket.closedAt = new Date();
+        if (status === TicketStatus.RESOLVED) {
+            ticket.resolvedAt = new Date();
+        } else if (status !== TicketStatus.CLOSED) {
+            ticket.resolvedAt = undefined;
+        }
+        if (status === TicketStatus.CLOSED) {
+            ticket.closedAt = new Date();
+        } else {
+            ticket.closedAt = undefined;
+        }
     }
 
     if (priority && priority !== ticket.priority) {
@@ -177,10 +229,19 @@ export const updateTicket = async (req: AuthRequest, res: Response): Promise<voi
     await ticket.populate(['category', 'createdBy', 'assignedAgent']);
 
     if (changes.length > 0) {
+        let action = ActivityAction.TICKET_UPDATED;
+        if (status) {
+            if (status === TicketStatus.RESOLVED) action = ActivityAction.TICKET_RESOLVED;
+            else if (status === TicketStatus.CLOSED) action = ActivityAction.TICKET_CLOSED;
+            else action = ActivityAction.STATUS_CHANGED;
+        } else if (priority) {
+            action = ActivityAction.PRIORITY_CHANGED;
+        }
+
         await ActivityLog.create({
             ticket: ticket._id,
             actor: req.user!.id,
-            action: status ? ActivityAction.STATUS_CHANGED : ActivityAction.TICKET_UPDATED,
+            action,
             description: changes.join('; '),
             metadata: { changes },
         });
@@ -192,16 +253,34 @@ export const updateTicket = async (req: AuthRequest, res: Response): Promise<voi
 export const assignTicket = async (req: AuthRequest, res: Response): Promise<void> => {
     const { agentId } = req.body;
 
-
     if (req.user!.role === UserRole.AGENT && agentId !== req.user!.id) {
         sendError(res, 'Agents can only assign tickets to themselves', 403);
         return;
     }
 
-    const ticket = await Ticket.findById(req.params.id);
+    const targetAgent = await User.findById(agentId);
+    if (!targetAgent) {
+        sendError(res, 'Agent not found', 404);
+        return;
+    }
+    if (targetAgent.role !== UserRole.AGENT) {
+        sendError(res, 'Tickets can only be assigned to agents', 400);
+        return;
+    }
+    if (!targetAgent.isActive) {
+        sendError(res, 'Cannot assign to an inactive agent', 400);
+        return;
+    }
+
+    const ticket = await Ticket.findOne(ticketIdFilter(req.params.id));
 
     if (!ticket) {
         sendError(res, 'Ticket not found', 404);
+        return;
+    }
+
+    if (ticket.status === TicketStatus.CLOSED) {
+        sendError(res, 'Cannot assign a closed ticket', 400);
         return;
     }
 
@@ -227,7 +306,7 @@ export const assignTicket = async (req: AuthRequest, res: Response): Promise<voi
 };
 
 export const deleteTicket = async (req: AuthRequest, res: Response): Promise<void> => {
-    const ticket = await Ticket.findByIdAndDelete(req.params.id);
+    const ticket = await Ticket.findOneAndDelete(ticketIdFilter(req.params.id));
     if (!ticket) {
         sendError(res, 'Ticket not found', 404);
         return;
@@ -237,7 +316,7 @@ export const deleteTicket = async (req: AuthRequest, res: Response): Promise<voi
 
 export const getAvailableTickets = async (req: AuthRequest, res: Response): Promise<void> => {
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
+    const limit = Math.min(parseInt(req.query.limit as string) || 10, 100);
 
     const filter: Record<string, unknown> = {
         status: TicketStatus.OPEN,

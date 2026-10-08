@@ -1,4 +1,4 @@
-import { body } from 'express-validator';
+import { body, query } from 'express-validator';
 import { UserRole } from '../types';
 
 const isValidPhone = (value: string): boolean => {
@@ -19,4 +19,12 @@ export const updateRoleValidator = [
 export const changePasswordValidator = [
   body('currentPassword').notEmpty().withMessage('Current password is required'),
   body('newPassword').notEmpty().withMessage('New password is required').isLength({ min: 8 }).withMessage('Password must be at least 8 characters').matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/).withMessage('Password must contain uppercase, lowercase and number').custom((value, { req }) => value !== (req.body as { currentPassword?: string }).currentPassword).withMessage('New password must be different from current password'),
+];
+
+export const userListQueryValidator = [
+  query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer').toInt(),
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100').toInt(),
+  query('role').optional().isIn(Object.values(UserRole)).withMessage('Invalid role'),
+  query('isActive').optional().isBoolean({ loose: true }).withMessage('isActive must be a boolean'),
+  query('search').optional().trim().isLength({ max: 200 }).withMessage('Search term must be at most 200 characters'),
 ];
