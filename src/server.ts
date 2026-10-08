@@ -3,6 +3,7 @@ dotenv.config();
 
 import app from './app';
 import { connectDatabase } from './config/database';
+import { initSocket } from './socket';
 import { logger } from './utils/logger';
 
 const PORT = parseInt(process.env.PORT || '5000');
@@ -13,6 +14,8 @@ const startServer = async (): Promise<void> => {
   const server = app.listen(PORT, () => {
     logger.info(`Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
   });
+
+  initSocket(server);
 
   const shutdown = async (signal: string) => {
     logger.info(`${signal} received. Shutting down gracefully...`);

@@ -5,6 +5,7 @@ import { Ticket } from '../models/Ticket';
 import { ActivityLog } from '../models/ActivityLog';
 import { AuthRequest, UserRole, ActivityAction } from '../types';
 import { sendSuccess, sendCreated, sendError } from '../utils/apiResponse';
+import { emitCommentCreated, emitCommentDeleted } from '../socket';
 
 export const getComments = async (req: AuthRequest, res: Response): Promise<void> => {
   const ticket = await Ticket.findById(req.params.ticketId);
@@ -73,6 +74,8 @@ export const addComment = async (req: AuthRequest, res: Response): Promise<void>
     metadata: { commentId: comment._id, isInternal },
   });
 
+  emitCommentCreated(comment);
+
   sendCreated(res, comment, 'Comment added successfully');
 };
 
@@ -107,6 +110,11 @@ export const deleteComment = async (req: AuthRequest, res: Response): Promise<vo
     return;
   }
 
+  const { ticket, isInternal } = comment;
+  const ticketId = ticket.toString();
+  const commentId = comment._id.toString();
+
   await comment.deleteOne();
+  emitCommentDeleted({ ticketId, commentId, isInternal });
   sendSuccess(res, null, 'Comment deleted');
 };
