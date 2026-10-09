@@ -2,6 +2,13 @@
      npm install
      .env.example .env      
 
+   Tests:
+
+  npm test
+  npm run test:coverage
+
+   API integration tests use only `TEST_MONGODB_URI`; they never load the application's `.env` database URI. Set it to a dedicated test database whose name ends in `_test`, for example `mongodb://127.0.0.1:27017/ticket_management_test`. Without this variable the integration suites are reported as skipped. If configured but unreachable, the suites fail during setup rather than silently passing. Tests delete only fixture IDs they created.
+
    .env:
 
      NODE_ENV=development

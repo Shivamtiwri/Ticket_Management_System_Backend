@@ -7,7 +7,9 @@
     "dev": "nodemon",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "jest --forceExit --detectOpenHandles",
+    "test": "jest --runInBand",
+    "test:backend": "npm test",
+    "test:coverage": "jest --runInBand --coverage",
     "test:watch": "jest --watch",
     "seed": "ts-node src/scripts/seed.ts"
   },

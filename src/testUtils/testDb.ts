@@ -1,35 +1,40 @@
-import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 
-dotenv.config();
-
 export const buildTestUri = (): string => {
-  const base = process.env.MONGODB_URI || 'mongodb://localhost:27017/ticket_management_test';
-  const schemeIdx = base.indexOf('://');
-  if (schemeIdx === -1) {
-    return 'mongodb://localhost:27017/ticket_management_test';
+  const uri = process.env.TEST_MONGODB_URI;
+  if (!uri) {
+    throw new Error(
+      'TEST_MONGODB_URI is required for backend integration tests. Set it to a dedicated database whose name ends in "_test".'
+    );
   }
-  const authorityStart = schemeIdx + 3;
-  const pathStart = base.indexOf('/', authorityStart);
-  const queryIdx = base.indexOf('?');
-  const suffix = queryIdx === -1 ? '' : base.slice(queryIdx);
 
-  if (pathStart === -1) {
-    return queryIdx === -1
-      ? `${base}/ticket_management_test`
-      : `${base.slice(0, queryIdx)}/ticket_management_test${suffix}`;
+  let databaseName: string;
+  try {
+    databaseName = new URL(uri).pathname.replace(/^\/+/, '');
+  } catch {
+    throw new Error('TEST_MONGODB_URI must be a valid MongoDB connection URI.');
   }
-  return `${base.slice(0, pathStart + 1)}ticket_management_test${suffix}`;
+
+  if (!/(?:^|[-_])test$/i.test(databaseName)) {
+    throw new Error(
+      'Refusing to connect integration tests to a database not named with the "_test" or "-test" suffix.'
+    );
+  }
+
+  return uri;
 };
 
-export const TEST_URI = buildTestUri();
+export const TEST_URI = process.env.TEST_MONGODB_URI ? buildTestUri() : undefined;
 
-export const connectTestDb = async (timeoutMs = 5000): Promise<boolean> => {
-  try {
-    await mongoose.connect(TEST_URI, { serverSelectionTimeoutMS: timeoutMs });
-    return true;
-  } catch (err) {
-    console.warn('MongoDB unavailable - DB-backed tests will be skipped:', (err as Error).message);
-    return false;
+export const connectTestDb = async (timeoutMs = 5000): Promise<void> => {
+  if (!TEST_URI) {
+    throw new Error('TEST_MONGODB_URI is required for backend integration tests.');
+  }
+  await mongoose.connect(TEST_URI, { serverSelectionTimeoutMS: timeoutMs });
+};
+
+export const disconnectTestDb = async (): Promise<void> => {
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.disconnect();
   }
 };
