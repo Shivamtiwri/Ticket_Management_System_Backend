@@ -5,6 +5,7 @@ import app from './app';
 import { connectDatabase } from './config/database';
 import { initSocket } from './socket';
 import { logger } from './utils/logger';
+import { validateCloudinaryConfig } from './middleware/upload';
 
 const PORT = parseInt(process.env.PORT || '5000');
 
@@ -23,6 +24,7 @@ const startServer = async (): Promise<void> => {
     process.exit(1);
   }
 
+  validateCloudinaryConfig();
   await connectDatabase();
 
   const server = app.listen(PORT, () => {

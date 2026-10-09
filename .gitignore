@@ -1,6 +1,8 @@
 node_modules/
 dist/
 .env
+*service-account*.json
+node-api-*.json
 uploads/
 *.log
 coverage/

@@ -14,9 +14,15 @@
      UPLOAD_DIR=uploads
      MAX_FILE_SIZE=5242880
      ALLOWED_FILE_TYPES=image/jpeg,image/png,image/gif,application/pdf,text/plain
+     CLOUDINARY_CLOUD_NAME=<your Cloudinary cloud name>
+     CLOUDINARY_API_KEY=<your Cloudinary API key>
+     CLOUDINARY_API_SECRET=<your Cloudinary API secret>
+     CLOUDINARY_FOLDER=ticket-attachments
      BCRYPT_ROUNDS=12
      RATE_LIMIT_WINDOW_MS=900000
      RATE_LIMIT_MAX=100
+
+   Configure the Cloudinary values from your Cloudinary dashboard in `backend/.env`. New attachments are uploaded to Cloudinary through the existing file picker/upload flow. Existing files in `uploads/` continue to work.
 
    Start in development (hot reload via nodemon):
 
