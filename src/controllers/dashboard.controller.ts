@@ -4,10 +4,15 @@ import { User } from '../models/User';
 import { AuthRequest, TicketStatus } from '../types';
 import { sendSuccess } from '../utils/apiResponse';
 import { Category } from '../models/Category';
+import { getVisibleCategoryIds } from '../utils/categoryVisibility';
 
 export const getCustomerDashboard = async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.id;
-  const baseFilter = { createdBy: userId };
+  const visibleCategoryIds = await getVisibleCategoryIds(req.user!.role);
+  const baseFilter = {
+    createdBy: userId,
+    ...(visibleCategoryIds ? { category: { $in: visibleCategoryIds } } : {}),
+  };
 
   const [total, open, inProgress, resolved, closed] = await Promise.all([
     Ticket.countDocuments(baseFilter),
@@ -27,7 +32,11 @@ export const getCustomerDashboard = async (req: AuthRequest, res: Response): Pro
 
 export const getAgentDashboard = async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.id;
-  const baseFilter = { assignedAgent: userId };
+  const visibleCategoryIds = await getVisibleCategoryIds(req.user!.role);
+  const baseFilter = {
+    assignedAgent: userId,
+    ...(visibleCategoryIds ? { category: { $in: visibleCategoryIds } } : {}),
+  };
 
   const [assigned, open, inProgress, waitingForUser, resolved] = await Promise.all([
     Ticket.countDocuments(baseFilter),

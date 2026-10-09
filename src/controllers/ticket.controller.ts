@@ -2,11 +2,13 @@
 import { Types } from 'mongoose';
 import { Ticket } from '../models/Ticket';
 import { User } from '../models/User';
+import { Category } from '../models/Category';
 import { ActivityLog } from '../models/ActivityLog';
 import { AuthRequest, UserRole, TicketStatus, ActivityAction } from '../types';
 import { sendSuccess, sendCreated, sendError, sendPaginated } from '../utils/apiResponse';
 import { isValidTransition } from '../utils/statusTransitions';
 import { buildSearchRegex, isObjectIdString, ticketIdFilter } from '../utils/queryUtils';
+import { canAccessCategory, getVisibleCategoryIds } from '../utils/categoryVisibility';
 
 const getSortOptions = (sortBy?: string): Record<string, 1 | -1> => {
     switch (sortBy) {
@@ -63,6 +65,12 @@ const castIdFields = (filter: Record<string, unknown>): Record<string, unknown> 
 
 export const createTicket = async (req: AuthRequest, res: Response): Promise<void> => {
     const { subject, description, category, priority, tags } = req.body;
+    const activeCategory = await Category.exists({ _id: category, isActive: true });
+    if (!activeCategory) {
+        sendError(res, 'Selected category is inactive or unavailable', 400);
+        return;
+    }
+
     const files = (req.files as Express.Multer.File[]) || [];
 
     const attachments = files.map((file) => ({
@@ -108,6 +116,10 @@ export const getTickets = async (req: AuthRequest, res: Response): Promise<void>
         req.user!.id,
         req.user!.role
     );
+    const visibleCategoryIds = await getVisibleCategoryIds(req.user!.role);
+    if (visibleCategoryIds) {
+        filter.$and = [{ category: { $in: visibleCategoryIds } }];
+    }
 
     if (sortBy === 'priority') {
         const match = castIdFields(filter);
@@ -160,22 +172,29 @@ export const getTicketById = async (req: AuthRequest, res: Response): Promise<vo
 
     const ticket = await Ticket.findOne({
         $or: [{ _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null }, { ticketId: id }],
-    })
-        .populate('category', 'name description')
-        .populate('createdBy', 'name email role')
-        .populate('assignedAgent', 'name email')
-        .populate('attachments.uploadedBy', 'name');
+    });
 
     if (!ticket) {
         sendError(res, 'Ticket not found', 404);
         return;
     }
 
+    if (!await canAccessCategory(ticket.category, req.user!.role)) {
+        sendError(res, 'Ticket not found', 404);
+        return;
+    }
 
-    if (req.user!.role === UserRole.CUSTOMER && ticket.createdBy._id.toString() !== req.user!.id) {
+    if (req.user!.role === UserRole.CUSTOMER && ticket.createdBy.toString() !== req.user!.id) {
         sendError(res, 'Access denied', 403);
         return;
     }
+
+    await ticket.populate([
+        { path: 'category', select: 'name description' },
+        { path: 'createdBy', select: 'name email role' },
+        { path: 'assignedAgent', select: 'name email' },
+        { path: 'attachments.uploadedBy', select: 'name' },
+    ]);
 
     sendSuccess(res, ticket);
 };
@@ -187,6 +206,10 @@ export const updateTicket = async (req: AuthRequest, res: Response): Promise<voi
         return;
     }
 
+    if (!await canAccessCategory(ticket.category, req.user!.role)) {
+        sendError(res, 'Ticket not found', 404);
+        return;
+    }
 
     if (req.user!.role === UserRole.CUSTOMER && ticket.createdBy.toString() !== req.user!.id) {
         sendError(res, 'Access denied', 403);
@@ -279,6 +302,11 @@ export const assignTicket = async (req: AuthRequest, res: Response): Promise<voi
         return;
     }
 
+    if (!await canAccessCategory(ticket.category, req.user!.role)) {
+        sendError(res, 'Ticket not found', 404);
+        return;
+    }
+
     if (ticket.status === TicketStatus.CLOSED) {
         sendError(res, 'Cannot assign a closed ticket', 400);
         return;
@@ -322,6 +350,10 @@ export const getAvailableTickets = async (req: AuthRequest, res: Response): Prom
         status: TicketStatus.OPEN,
         assignedAgent: { $exists: false },
     };
+    const visibleCategoryIds = await getVisibleCategoryIds(req.user!.role);
+    if (visibleCategoryIds) {
+        filter.category = { $in: visibleCategoryIds };
+    }
 
     const [tickets, total] = await Promise.all([
         Ticket.find(filter)

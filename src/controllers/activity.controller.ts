@@ -5,6 +5,7 @@ import { Ticket } from '../models/Ticket';
 import { AuthRequest, UserRole } from '../types';
 import { sendPaginated, sendSuccess, sendError } from '../utils/apiResponse';
 import { buildSearchRegex, isObjectIdString, ticketIdFilter } from '../utils/queryUtils';
+import { canAccessCategory } from '../utils/categoryVisibility';
 
 export const getActivityLogs = async (req: AuthRequest, res: Response): Promise<void> => {
   const page = parseInt(req.query.page as string) || 1;
@@ -53,6 +54,11 @@ export const getActivityLogs = async (req: AuthRequest, res: Response): Promise<
 export const getTicketActivity = async (req: AuthRequest, res: Response): Promise<void> => {
   const ticket = await Ticket.findOne(ticketIdFilter(req.params.ticketId));
   if (!ticket) {
+    sendError(res, 'Ticket not found', 404);
+    return;
+  }
+
+  if (!await canAccessCategory(ticket.category, req.user!.role)) {
     sendError(res, 'Ticket not found', 404);
     return;
   }

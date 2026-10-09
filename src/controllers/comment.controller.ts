@@ -6,11 +6,17 @@ import { ActivityLog } from '../models/ActivityLog';
 import { AuthRequest, UserRole, ActivityAction } from '../types';
 import { sendSuccess, sendCreated, sendError } from '../utils/apiResponse';
 import { ticketIdFilter } from '../utils/queryUtils';
+import { canAccessCategory } from '../utils/categoryVisibility';
 import { emitCommentCreated, emitCommentDeleted } from '../socket';
 
 export const getComments = async (req: AuthRequest, res: Response): Promise<void> => {
   const ticket = await Ticket.findOne(ticketIdFilter(req.params.ticketId));
   if (!ticket) {
+    sendError(res, 'Ticket not found', 404);
+    return;
+  }
+
+  if (!await canAccessCategory(ticket.category, req.user!.role)) {
     sendError(res, 'Ticket not found', 404);
     return;
   }
@@ -38,6 +44,10 @@ export const addComment = async (req: AuthRequest, res: Response): Promise<void>
     return;
   }
 
+  if (!await canAccessCategory(ticket.category, req.user!.role)) {
+    sendError(res, 'Ticket not found', 404);
+    return;
+  }
 
   if (req.user!.role === UserRole.CUSTOMER && ticket.createdBy.toString() !== req.user!.id) {
     sendError(res, 'Access denied', 403);
@@ -89,6 +99,11 @@ export const updateComment = async (req: AuthRequest, res: Response): Promise<vo
     return;
   }
 
+  if (!await canAccessCategory(ticket.category, req.user!.role)) {
+    sendError(res, 'Ticket not found', 404);
+    return;
+  }
+
   const comment = await Comment.findOne({
     _id: req.params.commentId,
     ticket: ticket._id,
@@ -113,6 +128,11 @@ export const updateComment = async (req: AuthRequest, res: Response): Promise<vo
 export const deleteComment = async (req: AuthRequest, res: Response): Promise<void> => {
   const ticket = await Ticket.findOne(ticketIdFilter(req.params.ticketId));
   if (!ticket) {
+    sendError(res, 'Ticket not found', 404);
+    return;
+  }
+
+  if (!await canAccessCategory(ticket.category, req.user!.role)) {
     sendError(res, 'Ticket not found', 404);
     return;
   }

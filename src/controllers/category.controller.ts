@@ -1,7 +1,6 @@
 ﻿
 import { Response } from 'express';
 import { Category } from '../models/Category';
-import { Ticket } from '../models/Ticket';
 import { ActivityLog } from '../models/ActivityLog';
 import { AuthRequest, ActivityAction } from '../types';
 import { sendSuccess, sendCreated, sendError } from '../utils/apiResponse';
@@ -65,25 +64,6 @@ export const updateCategory = async (req: AuthRequest, res: Response): Promise<v
   });
 
   sendSuccess(res, category, 'Category updated successfully');
-};
-
-export const deleteCategory = async (req: AuthRequest, res: Response): Promise<void> => {
-  const ticketCount = await Ticket.countDocuments({ category: req.params.id });
-  if (ticketCount > 0) {
-    sendError(
-      res,
-      `Cannot delete category: it is used by ${ticketCount} ticket${ticketCount === 1 ? '' : 's'}. Deactivate it instead`,
-      409
-    );
-    return;
-  }
-
-  const category = await Category.findByIdAndDelete(req.params.id);
-  if (!category) {
-    sendError(res, 'Category not found', 404);
-    return;
-  }
-  sendSuccess(res, null, 'Category deleted successfully');
 };
 
 export const toggleCategoryStatus = async (req: AuthRequest, res: Response): Promise<void> => {

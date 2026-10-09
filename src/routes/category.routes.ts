@@ -1,7 +1,6 @@
-﻿import { Router } from 'express';
+import { Router } from 'express';
 import {
-  getCategories, getActiveCategories, createCategory,
-  updateCategory, deleteCategory, toggleCategoryStatus,
+  getCategories, getActiveCategories, createCategory, updateCategory, toggleCategoryStatus,
 } from '../controllers/category.controller';
 import { authenticate, authorize } from '../middleware/auth';
 import { validate } from '../middleware/validate';
@@ -12,10 +11,9 @@ const router = Router();
 
 router.get('/active', getActiveCategories);
 router.use(authenticate);
-router.get('/', getCategories);
+router.get('/', authorize(UserRole.ADMIN), getCategories);
 router.post('/', authorize(UserRole.ADMIN), validate(createCategoryValidator), createCategory);
 router.put('/:id', authorize(UserRole.ADMIN), validate([...categoryIdValidator, ...updateCategoryValidator]), updateCategory);
 router.patch('/:id/toggle-status', authorize(UserRole.ADMIN), validate(categoryIdValidator), toggleCategoryStatus);
-router.delete('/:id', authorize(UserRole.ADMIN), validate(categoryIdValidator), deleteCategory);
 
 export default router;
